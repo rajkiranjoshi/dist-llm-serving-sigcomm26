@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Flattened vendored copy of two upstream llm-d bases:
+#   guides/recipes/modelserver/base/single-host/default  (deployment + namereference)
+#   guides/recipes/modelserver/common                    (sa)
+resources:
+  - decode-deployment.yaml
+  - sa.yaml
+
+configurations:
+  - namereference.yaml

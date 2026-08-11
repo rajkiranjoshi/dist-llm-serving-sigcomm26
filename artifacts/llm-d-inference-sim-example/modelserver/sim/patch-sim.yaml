@@ -1,0 +1,87 @@
+# llm-d-inference-sim as the model server.
+#
+# Every tuning constant here is load-bearing for the A/B experiment. See the
+# runbook section "Why these simulator flags" for the derivation.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: decode
+spec:
+  replicas: 4
+  template:
+    spec:
+      containers:
+        - name: modelserver
+          args:
+            - "--model=Qwen/Qwen3-32B"
+            # Use the built-in regex tokenizer. This is what lets us drop the
+            # `vllm-render` sidecar (vllm/vllm-openai-cpu, multi-GB per pod) that
+            # upstream's manifests/deployment.yaml uses for real HF tokenizers.
+            # Prefix routing is unaffected: EPP's approx-prefix-cache-producer
+            # hashes request bodies itself and never consults the server's tokenizer.
+            - "--force-dummy-tokenizer"
+            - "--port=8000"
+            - "--max-model-len=8192"
+            # Deliberately small so time-factor-under-load engages at a QPS a
+            # 2-vCPU host can actually generate.
+            - "--max-num-seqs=4"
+            # Track a simulated prefix cache, so n_cached is real.
+            - "--enable-kvcache"
+            - "--block-size=16"
+            # 400 blocks x 16 = 6400 tokens ~= 4 of the workload's 1500-token
+            # prefixes. With 4 replicas the aggregate holds all 16 prefixes, but
+            # only if the router partitions them. That gap is the experiment.
+            - "--kv-cache-size=400"
+            # MANDATORY. Under the `constant` calculator TTFT is flat and a cache
+            # hit costs the same as a miss, which would make the whole demo inert.
+            # Under `per-token`:
+            #   prefill = prefill-overhead + (n - n_cached) * prefill-time-per-token
+            - "--latency-calculator=per-token"
+            - "--prefill-overhead=50ms"
+            - "--prefill-time-per-token=300us"
+            - "--inter-token-latency=10ms"
+            # Ramps 1.0 -> 4.0 as in-flight requests go 1 -> max-num-seqs, so
+            # saturation is visible to the token-load-scorer's payoff.
+            - "--time-factor-under-load=4"
+            - "--seed=42"
+          env:
+            # POD_NAME makes the simulator stamp every response with an
+            # `x-inference-pod` header, giving the driver exact request->pod
+            # attribution instead of inferring it from metric deltas.
+            #
+            # POD_IP is NOT optional: with --enable-kvcache the simulator exits at
+            # startup with "IP should be defined in the environment (POD_IP) for
+            # KV cache to work". All three are set via fieldRef below.
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          resources:
+            requests:
+              cpu: "50m"
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          startupProbe:
+            initialDelaySeconds: 2
+            periodSeconds: 2
+            timeoutSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3

@@ -1,0 +1,7 @@
+# Vendored from llm-d/llm-d, main branch: guides/recipes/modelserver/common/sa.yaml
+# Last upstream change: 645891a9 (2026-04-23). Byte-identical to upstream.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sa
+automountServiceAccountToken: false

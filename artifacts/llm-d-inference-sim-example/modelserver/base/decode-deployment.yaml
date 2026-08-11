@@ -1,0 +1,47 @@
+# Vendored from llm-d/llm-d, main branch:
+#   guides/recipes/modelserver/base/single-host/default/decode-deployment.yaml
+# Last upstream change: 645891a9 (2026-04-23). Byte-identical to upstream apart
+# from this comment block. To check for drift:
+#   git -C <llm-d> show main:guides/recipes/modelserver/base/single-host/default/decode-deployment.yaml \
+#     | diff - <(grep -v '^#' this-file)
+#
+# The `llm-d.ai/role: decode` label is what both the llm-d InferencePool and the
+# plain baseline Service select on.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: decode
+  labels:
+    llm-d.ai/role: decode
+spec:
+  selector:
+    matchLabels:
+      llm-d.ai/role: decode
+  template:
+    metadata:
+      labels:
+        llm-d.ai/role: decode
+    spec:
+      serviceAccountName: sa
+      containers:
+        - name: modelserver
+          image: REPLACE_MODEL_SERVER_IMAGE
+          command: []
+          args: []
+          env: []
+          ports:
+            - name: modelserver
+              containerPort: 8000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: modelserver
+          readinessProbe:
+            httpGet:
+              path: /v1/models
+              port: modelserver
+          startupProbe:
+            httpGet:
+              path: /v1/models
+              port: modelserver
