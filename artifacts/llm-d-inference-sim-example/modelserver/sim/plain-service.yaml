@@ -1,0 +1,22 @@
+# The baseline arm of the A/B: an ordinary ClusterIP Service over the SAME
+# simulator pods the llm-d InferencePool selects.
+#
+# This is plain kube-proxy load balancing: L4, per-CONNECTION, no knowledge of
+# request content. The llm-d arm is L7 and per-REQUEST. Same pods, same workload,
+# same seed -- the only difference is the routing layer.
+#
+# kustomize adds the overlay's `llm-d.ai/*` labels to this selector too
+# (includeSelectors: true), so it lands on exactly the decode pods.
+apiVersion: v1
+kind: Service
+metadata:
+  name: plain
+spec:
+  type: ClusterIP
+  selector:
+    llm-d.ai/role: decode
+  ports:
+    - name: http
+      port: 8000
+      protocol: TCP
+      targetPort: 8000

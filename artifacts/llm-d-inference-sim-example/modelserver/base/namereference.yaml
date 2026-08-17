@@ -1,0 +1,11 @@
+# Vendored from llm-d/llm-d, main branch:
+#   guides/recipes/modelserver/base/single-host/default/namereference.yaml
+# Last upstream change: 8c627843 (2026-05-26).
+#
+# Teaches kustomize to rewrite serviceAccountName when namePrefix renames the SA.
+# Upstream also carries a ResourceClaimTemplate rule, dropped here as unused.
+nameReference:
+  - kind: ServiceAccount
+    fieldSpecs:
+      - path: spec/template/spec/serviceAccountName
+        kind: Deployment

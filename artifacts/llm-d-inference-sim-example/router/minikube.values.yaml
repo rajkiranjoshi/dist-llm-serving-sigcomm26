@@ -1,0 +1,102 @@
+## llm-d router values for the minikube + llm-d-inference-sim example.
+##
+## This is a SINGLE self-contained file: the merge of upstream llm-d/llm-d main
+##   guides/recipes/router/base.values.yaml                     (20b6030f, 2026-08-10)
+##   guides/optimized-baseline/router/optimized-baseline.values.yaml (b3b08b47, 2026-07-17)
+## with resource requests shrunk to fit a 2-vCPU minikube node. Upstream splits
+## these across two `-f` flags; we flatten so the reader passes one file and needs
+## no llm-d checkout.
+##
+## Deliberate divergences from upstream, all of them below and commented in place:
+##   1. EPP + Envoy resource requests shrunk (upstream 8 CPU / 16 Gi total).
+##   2. peakPrefillThroughput 15928 -> 3333, matched to the simulator.
+##   3. Envoy --concurrency 8 -> 2.
+##   4. modelServers.matchLabels uses our own guide label.
+##
+## The plugin list below is copied VERBATIM from optimized-baseline, except for
+## peakPrefillThroughput. That is the point of the example: the routing logic is
+## the real, unmodified guide configuration.
+
+router:
+  extraServicePorts:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: 8081
+
+  epp:
+    replicas: 1
+    flags:
+      v: 2
+    pluginsConfigFile: "optimized-baseline-sim-plugins.yaml"
+    pluginsCustomConfig:
+      optimized-baseline-sim-plugins.yaml: |
+        apiVersion: llm-d.ai/v1alpha1
+        kind: EndpointPickerConfig
+        plugins:
+        # Hashes request bodies inside EPP to maintain an approximate view of what
+        # each endpoint has cached. Reads nothing from the model server -- which is
+        # exactly why this guide's routing works unmodified against a simulator.
+        - type: approx-prefix-cache-producer
+        # Counts in-flight requests/tokens per endpoint from EPP's own request
+        # lifecycle hooks. Also model-server-independent.
+        - type: inflight-load-producer
+        - type: prefix-cache-affinity-filter
+          parameters:
+            # Upstream default is 15928 tok/s, measured on Qwen3-32B / 2xH100 / TP=2.
+            # The simulator's synthetic prefill rate is the reciprocal of
+            # --prefill-time-per-token:  1 / 300us = 3333 tok/s.
+            # Leaving the H100 number here would understate estimated TTFT
+            # (inFlightTokens / peakPrefillThroughput * 1000 ms) by ~4.8x, so the
+            # maxTTFTPenaltyMs load gate would break stickiness later than the
+            # simulator's actual behaviour warrants. Re-derive if you change
+            # --prefill-time-per-token in modelserver/sim/patch-sim.yaml.
+            peakPrefillThroughput: 3333
+        - type: token-load-scorer
+        schedulingProfiles:
+        - name: default
+          plugins:
+          - pluginRef: prefix-cache-affinity-filter
+          - pluginRef: token-load-scorer
+    # Upstream requests 4 CPU / 8Gi. minikube's own control plane already reserves
+    # ~750m of this node's 2 CPU, so upstream values would never schedule.
+    resources:
+      requests:
+        cpu: "200m"
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+
+  inferencePool:
+    failureMode: "FailOpen"
+
+  modelServers:
+    protocol: http
+    # Join key with modelserver/sim/kustomization.yaml's `labels:` block.
+    matchLabels:
+      llm-d.ai/guide: "optimized-baseline-sim"
+
+  proxy:
+    # The Envoy sidecar IS the standalone-mode data plane; EPP only returns an
+    # ext_proc verdict over gRPC. Setting proxy.enabled=false would leave no data
+    # path, so it stays -- just much smaller.
+    args:
+      - "--service-node"
+      - "envoy-sidecar"
+      - "--log-level"
+      - "warn"
+      # Upstream uses 8. This node has 2 CPUs total.
+      - "--concurrency"
+      - "2"
+      - "--drain-strategy"
+      - "immediate"
+      - "--drain-time-s"
+      - "60"
+      - "-c"
+      - "/etc/envoy/envoy.yaml"
+    resources:
+      requests:
+        cpu: "200m"
+        memory: 256Mi
+      limits:
+        memory: 512Mi
