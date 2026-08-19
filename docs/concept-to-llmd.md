@@ -2,10 +2,10 @@
 
 | Concept/Topic | llm-d component | Link to src code |
 |---------------|-----------------|------------------|
-| Request routing / load balancing | "llm-d router" i.e. EPP | |
-| Request scheduling (SLO, prioritization, isolation) | Flow Control | |
-| RDMA Networking | N/A. Libraries driving RDMA networking are bundled with the inference engine (e.g. vLLM). See NIXL, DeepEP, Mori-EP. | |
-| Auto-scaling | | |
-| KV cache storage and management | | |
-| Telemetry, tracing and diagnostics (Observability) | | |
-| Fault Tolerance | | |
+| Request routing / load balancing | "llm-d router" or EndPoint Picker (EPP) | [llm-d-router](https://github.com/llm-d/llm-d-router) |
+| Request scheduling (SLO, prioritization, isolation) | Flow Control | [llm-d flowcontrol](https://github.com/llm-d/llm-d-router/tree/4a0edbb0/pkg/epp/flowcontrol) |
+| RDMA Networking | N/A. Other open-source libraries. | For P/D transfers: [NIXL](https://github.com/ai-dynamo/nixl), [Mori-IO](https://github.com/rocm/mori). For EP all2all transfers: [DeepEP](https://github.com/deepseek-ai/DeepEP), [Mori-EP](https://github.com/rocm/mori). |
+| Auto-scaling | llm-d-workload-variant-autoscaler | [llm-d-workload-variant-autoscaler](https://github.com/llm-d/llm-d-workload-variant-autoscaler) |
+| KV cache storage and management | External connectors like LMCache/Mooncake or the integrated vLLM OffloadingConnector are available as modular extensions, rather than a solitary static implementation. Native KV index/events. | [llm-d kvcache](https://github.com/llm-d/llm-d-router/tree/4a0edbb0/pkg/kvcache), [llm-d-kv-cache](https://github.com/llm-d/llm-d-kv-cache), [KV Offloader Documentation](https://github.com/llm-d/llm-d/blob/main/docs/architecture/advanced/kv-management/kv-offloader.md) |
+| Telemetry, tracing and diagnostics (Observability) | Router-side metrics/tracing + monitoring guides. For tracing and logging: llm-d observability. | [llm-d observability](https://github.com/llm-d/llm-d-router/tree/4a0edbb0/pkg/common/observability), [Setup docs](https://github.com/llm-d/llm-d/tree/main/docs/operations/observability) |
+| Fault Tolerance | (1) Envoy `failure_mode_allow`/FailOpen — requests still route to a model server if EPP is down/unresponsive. (2) Flow-control queues are in-memory, lost on EPP restart/crash. (3) Multi-replica EPP coordination via leasing. | [Routing config reference](https://github.com/llm-d/llm-d-router/blob/4a0edbb0/config/charts/llm-d-router-standalone/values.yaml#L147), [Flow-control architecture](https://github.com/llm-d/llm-d/blob/main/docs/architecture/core/router/epp/flow-control.md), [Flow Control Registry](https://github.com/llm-d/llm-d-router/tree/4a0edbb0/pkg/epp/flowcontrol/registry) |
